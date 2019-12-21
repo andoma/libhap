@@ -56,6 +56,7 @@ typedef enum {
   HAP_INTEGER = 1,
   HAP_STRING = 2,
   HAP_BOOLEAN = 3,
+  HAP_FLOAT = 4,
 } hap_value_type_t;
 
 
@@ -65,6 +66,7 @@ typedef struct {
     const char *string;
     int integer;
     bool boolean;
+    float number;
   };
 } hap_value_t;
 

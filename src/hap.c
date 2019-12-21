@@ -357,6 +357,9 @@ value_buf_print(buf_t *b, hap_value_t value)
   case HAP_INTEGER:
     buf_printf(b, "\"value\":%d", value.integer);
     break;
+  case HAP_FLOAT:
+    buf_printf(b, "\"value\":%f", value.number);
+    break;
   case HAP_BOOLEAN:
     buf_printf(b, "\"value\":%s", value.boolean ? "true" : "false");
     break;
@@ -402,8 +405,21 @@ characteristic_to_json(hap_characteristic_t c, int aid, int iid,
   case HAP_STRING:
     format = "string";
     break;
+  case HAP_FLOAT:
+    format = "float";
+    break;
   default:
     break;
+  }
+
+  if(c.minValue != c.maxValue) {
+    buf_printf(output,
+               "\"minValue\":%f,\"maxValue\":%f,",
+               c.minValue, c.maxValue);
+  }
+
+  if(c.minStep) {
+    buf_printf(output, "\"minStep\":%f,", c.minStep);
   }
 
   buf_printf(output, "%s\"format\":\"%s\",",
@@ -653,6 +669,9 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
               break;
             case HAP_BOOLEAN:
               hv.boolean = get_int(req_json, tokens, val, 0);
+              break;
+            case HAP_FLOAT:
+              hv.number = get_int(req_json, tokens, val, 0);
               break;
             case HAP_STRING:
               break;
