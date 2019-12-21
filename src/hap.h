@@ -202,6 +202,8 @@ typedef hap_characteristic_t (hap_get_callback_t)(void *opaque, int index);
 typedef hap_status_t (hap_set_callback_t)(void *opaque, int index,
                                           hap_value_t value);
 
+typedef void (hap_init_callback_t)(void *opaque);
+
 
 /**
  * Create a new accessory.
@@ -264,7 +266,8 @@ hap_service_t *hap_service_create(void *opaque,
                                   const char *type,
                                   int num_characteristics,
                                   hap_get_callback_t *get,
-                                  hap_set_callback_t *set) HAP_PUBLIC_API;
+                                  hap_set_callback_t *set,
+                                  hap_init_callback_t *init) HAP_PUBLIC_API;
 
 
 /**

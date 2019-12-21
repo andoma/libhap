@@ -78,6 +78,8 @@ struct hap_service {
 
   int (*hs_characteristic_set)(void *opaque, int index, hap_value_t value);
 
+  void (*hs_init)(void *opaque);
+
   void *hs_opaque;
 
   struct hap_accessory *hs_ha;

@@ -48,8 +48,9 @@ hap_service_t *
 hap_service_create(void *opaque,
                    const char *type,
                    int num_characteristics,
-                   hap_characteristic_t(*get)(void *opaque, int index),
-                   int (*set)(void *opaque, int index, hap_value_t value))
+                   hap_get_callback_t *get,
+                   hap_set_callback_t *set,
+                   hap_init_callback_t *init)
 {
   hap_service_t *hs = calloc(1, sizeof(hap_service_t) +
                              num_characteristics * sizeof(hap_value_type_t));
@@ -58,7 +59,7 @@ hap_service_create(void *opaque,
   hs->hs_num_characteristics = num_characteristics;
   hs->hs_characteristic_get = get;
   hs->hs_characteristic_set = set;
-
+  hs->hs_init = init;
   return hs;
 }
 
@@ -100,6 +101,11 @@ add_service_on_thread(hap_accessory_t *ha, hap_msg_t *hm)
   EVP_MD_CTX_free(ctx);
 
   TAILQ_INSERT_TAIL(&ha->ha_services, hs, hs_link);
+
+
+  if(hs->hs_init != NULL)
+    hs->hs_init(hs->hs_opaque);
+
   return 1;
 }
 
@@ -169,7 +175,8 @@ svc_accessory_information_create(hap_accessory_t *ha)
 {
   return hap_service_create(ha, HAP_SERVICE_ACCESSORY_INFORMATION, 6,
                             svc_accessory_information_get,
-                            svc_accessory_information_set);
+                            svc_accessory_information_set,
+                            NULL);
 }
 
 
@@ -188,7 +195,7 @@ static hap_service_t *
 svc_protocol_information_create(void)
 {
   return hap_service_create(NULL,  HAP_SERVICE_PROTOCOL_INFORMATION, 1,
-                            svc_protocol_information_get, NULL);
+                            svc_protocol_information_get, NULL, NULL);
 }
 
 
