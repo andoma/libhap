@@ -47,33 +47,11 @@ lb_set(void *opaque, bool on)
 }
 
 
-
-static bool
-lb_get(void *opaque)
-{
-  bool *status = opaque;
-  return *status;
-}
-
-static int light1;
-
-
-
-
 static hap_status_t
 rgb_set(void *opaque, float r, float g, float b)
 {
   printf("R=%f G=%f B=%f\n", r, g, b);
   return HAP_STATUS_OK;
-}
-
-
-
-static bool
-rgb_get(void *opaque)
-{
-  bool *status = opaque;
-  return *status;
 }
 
 
@@ -95,9 +73,9 @@ main(int argc, char **argv)
   hap_service_t *hs;
 
   if(1) {
-    hs = hap_rgb_light_create(&light1, rgb_get, rgb_set);
+    hs = hap_rgb_light_create(NULL, rgb_set);
   } else {
-    hs = hap_light_builb_create(&light1, lb_get, lb_set);
+    hs = hap_light_builb_create(NULL, lb_set);
   }
   hap_accessory_add_service(ha, hs, 1);
 

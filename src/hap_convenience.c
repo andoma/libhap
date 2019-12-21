@@ -24,8 +24,7 @@
 #include <stdlib.h>
 #include <sys/param.h>
 
-#include "hap.h"
-
+#include "hap_i.h"
 
 //---------------------------------------------------------------------
 // Simple lightbulb
@@ -34,7 +33,7 @@
 typedef struct {
   void *opaque;
   hap_status_t (*set)(void *opaque, bool on);
-  bool (*get)(void *opaque);
+  hap_service_t *hs;
 } lightbulb_t;
 
 
@@ -42,37 +41,49 @@ static hap_characteristic_t
 lightbulb_get(void *opaque, int index)
 {
   const lightbulb_t *lb = opaque;
-  const bool on = lb->get(lb->opaque);
+  bool *state = hap_service_state_recall(lb->hs, sizeof(bool));
 
   return (hap_characteristic_t) {
     .type = HAP_CHARACTERISTIC_ON,
     .perms = HAP_PERM_PR | HAP_PERM_PW | HAP_PERM_EV,
     .value = {
       .type = HAP_BOOLEAN,
-      .boolean = on
+      .boolean = *state
     }
   };
 }
 
-static int
+static hap_status_t
 lightbulb_set(void *opaque, int index, hap_value_t value)
 {
   const lightbulb_t *lb = opaque;
+  bool *state = hap_service_state_recall(lb->hs, sizeof(bool));
+
+  *state = value.boolean;
+  hap_accessory_lts_save(lb->hs->hs_ha);
   return lb->set(lb->opaque, value.boolean);
+}
+
+
+static void
+lightbulb_init(void *opaque)
+{
+  const lightbulb_t *lb = opaque;
+  bool *state = hap_service_state_recall(lb->hs, sizeof(bool));
+  lb->set(lb->opaque, *state);
 }
 
 
 hap_service_t *
 hap_light_builb_create(void *opaque,
-                       bool (*get)(void *opaque),
                        hap_status_t (*set)(void *opaque, bool on))
 {
   lightbulb_t *lb = calloc(1, sizeof(lightbulb_t));
   lb->opaque = opaque;
   lb->set = set;
-  lb->get = get;
-  return hap_service_create(lb, HAP_SERVICE_LIGHT_BULB, 1,
-                            lightbulb_get, lightbulb_set);
+  lb->hs = hap_service_create(lb, HAP_SERVICE_LIGHT_BULB, 1,
+                              lightbulb_get, lightbulb_set, lightbulb_init);
+  return lb->hs;
 }
 
 
@@ -80,16 +91,19 @@ hap_light_builb_create(void *opaque,
 // RGB light
 //---------------------------------------------------------------------
 
-typedef struct {
-  void *opaque;
-  hap_status_t (*set)(void *opaque, float r, float g, float b);
 
+typedef struct {
   bool on;
   int brightness;
   int hue;
   float saturation;
-  float color_temp;
+} rgb_state_t;
 
+
+typedef struct {
+  void *opaque;
+  hap_status_t (*set)(void *opaque, float r, float g, float b);
+  hap_service_t *hs;
 } rgblight_t;
 
 
@@ -97,6 +111,7 @@ static hap_characteristic_t
 rgblight_get(void *opaque, int index)
 {
   const rgblight_t *rgb = opaque;
+  rgb_state_t *state = hap_service_state_recall(rgb->hs, sizeof(rgb_state_t));
 
   switch(index) {
   case 0:
@@ -105,7 +120,7 @@ rgblight_get(void *opaque, int index)
       .perms = HAP_PERM_PR | HAP_PERM_PW | HAP_PERM_EV,
       .value = {
         .type = HAP_BOOLEAN,
-        .boolean = rgb->on
+        .boolean = state->on
       }
     };
   case 1:
@@ -114,7 +129,7 @@ rgblight_get(void *opaque, int index)
       .perms = HAP_PERM_PR | HAP_PERM_PW | HAP_PERM_EV,
       .value = {
         .type = HAP_INTEGER,
-        .integer = rgb->brightness
+        .integer = state->brightness
       },
       .unit = HAP_UNIT_PERCENTAGE,
       .minValue = 0,
@@ -127,7 +142,7 @@ rgblight_get(void *opaque, int index)
       .perms = HAP_PERM_PR | HAP_PERM_PW | HAP_PERM_EV,
       .value = {
         .type = HAP_FLOAT,
-        .integer = rgb->hue
+        .number = state->hue
       },
       .unit = HAP_UNIT_ARCDEGREES,
       .minValue = 0,
@@ -140,7 +155,7 @@ rgblight_get(void *opaque, int index)
       .perms = HAP_PERM_PR | HAP_PERM_PW | HAP_PERM_EV,
       .value = {
         .type = HAP_FLOAT,
-        .integer = rgb->saturation
+        .number = state->saturation
       },
       .unit = HAP_UNIT_PERCENTAGE,
       .minValue = 0,
@@ -151,47 +166,71 @@ rgblight_get(void *opaque, int index)
   return (hap_characteristic_t) {};
 }
 
-static int
-rgblight_set(void *opaque, int index, hap_value_t value)
+static hap_status_t
+rgblight_update(const rgblight_t *rgb, const rgb_state_t *state)
 {
-  rgblight_t *rgb = opaque;
-
-  switch(index) {
-  case 0:
-    rgb->on = value.boolean;
-    break;
-  case 1:
-    rgb->brightness = value.integer;
-    break;
-  case 2:
-    rgb->hue = value.number;
-    break;
-  case 3:
-    rgb->saturation = value.number;
-    break;
+  if(!state->on) {
+    return rgb->set(rgb->opaque, 0, 0, 0);
   }
-
-  const float S = rgb->saturation / 100.0f;
-  const float V = rgb->brightness / 100.0f;
-  const float kr = (300 + rgb->hue) % 360 / 60.0;
-  const float kg = (180 + rgb->hue) % 360 / 60.0;
-  const float kb = (60  + rgb->hue) % 360 / 60.0;
+  const float S = state->saturation / 100.0f;
+  const float V = state->brightness / 100.0f;
+  const float kr = (300 + state->hue) % 360 / 60.0;
+  const float kg = (180 + state->hue) % 360 / 60.0;
+  const float kb = (60  + state->hue) % 360 / 60.0;
   const float r = V - V * S * MAX(MIN(MIN(kr, 4 - kr), 1), 0);
   const float g = V - V * S * MAX(MIN(MIN(kg, 4 - kg), 1), 0);
   const float b = V - V * S * MAX(MIN(MIN(kb, 4 - kb), 1), 0);
   return rgb->set(rgb->opaque, r, g, b);
+
 }
+
+
+static int
+rgblight_set(void *opaque, int index, hap_value_t value)
+{
+  rgblight_t *rgb = opaque;
+  rgb_state_t *state = hap_service_state_recall(rgb->hs, sizeof(rgb_state_t));
+
+  switch(index) {
+  case 0:
+    state->on = value.boolean;
+    break;
+  case 1:
+    state->brightness = value.integer;
+    break;
+  case 2:
+    state->hue = value.number;
+    break;
+  case 3:
+    state->saturation = value.number;
+    break;
+  }
+
+  hap_accessory_lts_save(rgb->hs->hs_ha);
+  return rgblight_update(rgb, state);
+}
+
+
+static void
+rgblight_init(void *opaque)
+{
+  rgblight_t *rgb = opaque;
+  rgb_state_t *state = hap_service_state_recall(rgb->hs, sizeof(rgb_state_t));
+  rgblight_update(rgb, state);
+}
+
+
 
 
 hap_service_t *
 hap_rgb_light_create(void *opaque,
-                     bool (*get)(void *opaque),
                      hap_status_t (*set)(void *opaque,
                                          float r, float g, float b))
 {
   rgblight_t *rgb = calloc(1, sizeof(rgblight_t));
   rgb->opaque = opaque;
   rgb->set = set;
-  return hap_service_create(rgb, HAP_SERVICE_LIGHT_BULB, 4,
-                            rgblight_get, rgblight_set);
+  rgb->hs = hap_service_create(rgb, HAP_SERVICE_LIGHT_BULB, 4,
+                               rgblight_get, rgblight_set, rgblight_init);
+  return rgb->hs;
 }

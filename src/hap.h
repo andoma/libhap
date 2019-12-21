@@ -319,12 +319,10 @@ void hap_accessory_destroy(hap_accessory_t *ha) HAP_PUBLIC_API;
  * (Unfortunately very sparse at the moment)
  */
 hap_service_t *hap_light_builb_create(void *opaque,
-                                      bool (*get)(void *opaque),
                                       hap_status_t (*set)(void *opaque,
                                                           bool on));
 
 hap_service_t * hap_rgb_light_create(void *opaque,
-                                     bool (*get)(void *opaque),
                                      hap_status_t (*set)(void *opaque,
                                                          float r, float g,
                                                          float b));
