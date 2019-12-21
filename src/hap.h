@@ -280,7 +280,7 @@ void hap_accessory_add_service(hap_accessory_t *ha, hap_service_t *hs,
  * Notify about update for a characteristic.
  *
  * This will push notification to all connected peers that have subscribed
- * for updated.
+ * for updates.
  *
  * For example, if you have a motion sensor and you have automation rules
  * configured that trigger on motion, you need to invoke this function
