@@ -57,6 +57,26 @@ lb_get(void *opaque)
 
 static int light1;
 
+
+
+
+static hap_status_t
+rgb_set(void *opaque, float r, float g, float b)
+{
+  printf("R=%f G=%f B=%f\n", r, g, b);
+  return HAP_STATUS_OK;
+}
+
+
+
+static bool
+rgb_get(void *opaque)
+{
+  bool *status = opaque;
+  return *status;
+}
+
+
 /**
  *
  */
@@ -65,7 +85,7 @@ main(int argc, char **argv)
 {
   hap_accessory_t *ha =
     hap_accessory_create("Hello World", "224-46-688",
-                         "hap.cfg",
+                         "rgb.cfg",
                          HAP_CAT_LIGHTING,
                          "Lonelycoder",
                          "Model1",
@@ -74,7 +94,11 @@ main(int argc, char **argv)
 
   hap_service_t *hs;
 
-  hs = hap_light_builb_create(&light1, lb_get, lb_set);
+  if(1) {
+    hs = hap_rgb_light_create(&light1, rgb_get, rgb_set);
+  } else {
+    hs = hap_light_builb_create(&light1, lb_get, lb_set);
+  }
   hap_accessory_add_service(ha, hs, 1);
 
   hap_accessory_start(ha);

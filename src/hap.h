@@ -178,12 +178,15 @@ typedef enum {
 #define HAP_CHARACTERISTIC_AUDIO_FEEDBACK          "5"
 #define HAP_CHARACTERISTIC_AIR_PARTICULATE_DENSITY "64"
 #define HAP_CHARACTERISTIC_AIR_PARTICULATE_SIZE    "65"
+#define HAP_CHARACTERISTIC_BRIGHTNESS              "8"
 #define HAP_CHARACTERISTIC_FIRMWARE_REVISION       "52"
+#define HAP_CHARACTERISTIC_HUE                     "13"
 #define HAP_CHARACTERISTIC_IDENTIFY                "14"
 #define HAP_CHARACTERISTIC_MANUFACTURER            "20"
 #define HAP_CHARACTERISTIC_MODEL                   "21"
 #define HAP_CHARACTERISTIC_NAME                    "23"
 #define HAP_CHARACTERISTIC_ON                      "25"
+#define HAP_CHARACTERISTIC_SATURATION              "2F"
 #define HAP_CHARACTERISTIC_SERIAL_NUMBER           "30"
 #define HAP_CHARACTERISTIC_VERSION                 "37"
 
@@ -316,3 +319,9 @@ hap_service_t *hap_light_builb_create(void *opaque,
                                       bool (*get)(void *opaque),
                                       hap_status_t (*set)(void *opaque,
                                                           bool on));
+
+hap_service_t * hap_rgb_light_create(void *opaque,
+                                     bool (*get)(void *opaque),
+                                     hap_status_t (*set)(void *opaque,
+                                                         float r, float g,
+                                                         float b));
