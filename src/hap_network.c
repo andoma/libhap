@@ -609,6 +609,20 @@ dispatch_message(hap_accessory_t *ha)
 }
 
 
+static void
+hap_remove_stale_service_state(hap_accessory_t *ha)
+{
+  // Remove service state that it's not in use.
+  hap_service_state_t *hss, *n;
+  for(hss = LIST_FIRST(&ha->ha_service_states); hss != NULL; hss = n) {
+    n = LIST_NEXT(hss, hss_link);
+    if(hss->hss_service == NULL) {
+      LIST_REMOVE(hss, hss_link);
+      free(hss);
+    }
+  }
+}
+
 
 
 
@@ -676,6 +690,10 @@ hap_thread(void *aux)
   hap_connection_t *hc;
   while((hc = LIST_FIRST(&ha->ha_connections)) != NULL)
     http_delete_connection(hc);
+
+  hap_remove_stale_service_state(ha);
+
+  hap_accessory_lts_save(ha);
 
   avahi_simple_poll_free(ha->ha_asp);
   return NULL;

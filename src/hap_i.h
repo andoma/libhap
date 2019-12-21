@@ -39,6 +39,7 @@
 #include "buf.h"
 
 TAILQ_HEAD(hap_msg_queue, hap_msg);
+LIST_HEAD(hap_service_state_list, hap_service_state);
 TAILQ_HEAD(hap_service_queue, hap_service);
 LIST_HEAD(hap_conection_list, hap_connection);
 LIST_HEAD(hap_peer_list, hap_peer);
@@ -64,11 +65,28 @@ typedef struct hap_msg {
 } hap_msg_t;
 
 
+typedef struct hap_service_state {
+  LIST_ENTRY(hap_service_state) hss_link;
+
+  struct hap_service *hss_service;
+  size_t hss_size;
+
+  // Used to match saved state to hap_service instance
+  uint8_t hss_config_digest[20];
+  uint8_t hss_data[0];
+
+} hap_service_state_t;
+
+
+
+
 struct hap_service {
 
   TAILQ_ENTRY(hap_service) hs_link;
   int hs_aid;
   int hs_iid;
+
+  struct hap_service_state *hs_state;
 
   char *hs_type;
 
@@ -103,6 +121,8 @@ typedef struct hap_peer {
 struct hap_accessory {
 
   struct hap_peer_list ha_peers;
+
+  struct hap_service_state_list ha_service_states;
 
   struct hap_service_queue ha_services;
 
@@ -189,6 +209,8 @@ char *hap_http_get_qa(const hap_query_args_t *qa, const char *key);
 // ==== hap.c ==============================================
 
 void hap_accessory_lts_save(hap_accessory_t *ha);
+
+void *hap_service_state_recall(hap_service_t *hs, size_t state_size);
 
 int hap_characteristics(hap_connection_t *hc, enum http_method method,
                         uint8_t *request_body, size_t request_body_len,

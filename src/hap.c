@@ -207,6 +207,7 @@ svc_protocol_information_create(void)
 #define HAP_CFG_PEER          3
 #define HAP_CFG_CONFIG_HASH   4
 #define HAP_CFG_CONFIG_NUMBER 5
+#define HAP_CFG_SERVICE_STATE 6
 
 
 static void
@@ -226,6 +227,21 @@ add_peer_from_config(hap_accessory_t *ha, const uint8_t *buf, int len)
   memcpy(hp->hp_id, buf, len);
   hp->hp_id[len] = 0;
   LIST_INSERT_HEAD(&ha->ha_peers, hp, hp_link);
+}
+
+
+static void
+add_service_state(hap_accessory_t *ha, const uint8_t *buf, size_t size)
+{
+  if(size < 20)
+    return;
+
+  hap_service_state_t *hss = malloc(sizeof(hap_service_state_t) + size - 20);
+  hss->hss_service = NULL;
+  hss->hss_size = size - 20;
+  memcpy(hss->hss_config_digest, buf, sizeof(hss->hss_config_digest));
+  memcpy(hss->hss_data, buf + 20, size - 20);
+  LIST_INSERT_HEAD(&ha->ha_service_states, hss, hss_link);
 }
 
 
@@ -259,6 +275,9 @@ hap_accessory_lts_parse(hap_accessory_t *ha, const uint8_t *buf, size_t size)
     case HAP_CFG_CONFIG_NUMBER:
       if(len == sizeof(ha->ha_config_number))
         memcpy(&ha->ha_config_number, buf, len);
+      break;
+    case HAP_CFG_SERVICE_STATE:
+      add_service_state(ha, buf, len);
       break;
     }
 
@@ -340,6 +359,18 @@ hap_accessory_lts_save(hap_accessory_t *ha)
     buf_append(&buf, hp->hp_id, strlen(hp->hp_id));
   }
 
+
+  const hap_service_state_t *hss;
+  LIST_FOREACH(hss, &ha->ha_service_states, hss_link) {
+    size_t s = hss->hss_size + sizeof(hss->hss_config_digest);
+    if(s > 255)
+      continue;
+    buf_append_u8(&buf, HAP_CFG_SERVICE_STATE);
+    buf_append_u8(&buf, s);
+    buf_append(&buf, hss->hss_config_digest, sizeof(hss->hss_config_digest));
+    buf_append(&buf, hss->hss_data, hss->hss_size);
+  }
+
   int fd = open(ha->ha_storage_path, O_WRONLY | O_TRUNC | O_CREAT, 0600);
   if(fd == -1) {
     hap_log(ha, NULL, LOG_WARNING, "Unable save state to %s -- %s",
@@ -355,6 +386,45 @@ hap_accessory_lts_save(hap_accessory_t *ha)
           ha->ha_storage_path);
   close(fd);
 }
+
+
+void *
+hap_service_state_recall(hap_service_t *hs, size_t state_size)
+{
+  if(hs->hs_state != NULL)
+    return hs->hs_state->hss_data;
+
+  hap_accessory_t *ha = hs->hs_ha;
+  hap_service_state_t *hss;
+  LIST_FOREACH(hss, &ha->ha_service_states, hss_link) {
+    if(hss->hss_service != NULL)
+      continue; // Already mapped
+
+    if(hss->hss_size != state_size)
+      continue;
+
+    if(!memcmp(hss->hss_config_digest, hs->hs_config_digest,
+               sizeof(hs->hs_config_digest))) {
+      hss->hss_service = hs;
+      hs->hs_state = hss;
+      return hss->hss_data;
+    }
+  }
+
+  hss = calloc(1, sizeof(hap_service_state_t) + state_size);
+  hss->hss_size = state_size;
+  memcpy(hss->hss_config_digest, hs->hs_config_digest,
+         sizeof(hss->hss_config_digest));
+  LIST_INSERT_HEAD(&ha->ha_service_states, hss, hss_link);
+  hss->hss_service = hs;
+  hs->hs_state = hss;
+  return hss->hss_data;
+}
+
+
+
+//====================================================================
+
 
 
 static void
@@ -885,8 +955,13 @@ hap_accessory_destroy(hap_accessory_t *ha)
     free(hp);
   }
 
-  hap_service_t *hs;
+  hap_service_state_t *hss;
+  while((hss = LIST_FIRST(&ha->ha_service_states)) != NULL) {
+    LIST_REMOVE(hss, hss_link);
+    free(hss);
+  }
 
+  hap_service_t *hs;
   while((hs = TAILQ_FIRST(&ha->ha_services)) != NULL) {
     TAILQ_REMOVE(&ha->ha_services, hs, hs_link);
     free(hs->hs_type);
