@@ -741,7 +741,7 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
       sep = ",";
 
       hap_characteristic_t c =
-        hs->hs_characteristic_get(hs->hs_opaque, iid - hs->hs_iid + 1);
+        hs->hs_characteristic_get(hs->hs_opaque, iid - hs->hs_iid - 1);
       characteristic_to_json(c, aid, iid, include_ev ? hc : NULL, &json);
       free(c.storage);
     }
