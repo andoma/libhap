@@ -204,6 +204,8 @@ typedef hap_status_t (hap_set_callback_t)(void *opaque, int index,
 
 typedef void (hap_init_callback_t)(void *opaque);
 
+typedef void (hap_fini_callback_t)(void *opaque);
+
 
 /**
  * Create a new accessory.
@@ -254,7 +256,9 @@ void hap_accessory_start(hap_accessory_t *ha) HAP_PUBLIC_API;
  *                      one characteristic (on, which can be in on or off state)
  *                      See specification for more details.
  * @get Invoked when libhap needs to read a characteristic.
- * @set Invoked when libhap needs to write a characteristic.
+ * @set Invoked when libhap needs to write a characteristic. Can be NULL.
+ * @init Invoked when libhap is about to announce the service. Can be NULL.
+ * @fini Invoked when libhap is about to remove the service. Can be NULL.
  *
  * The callbacks are always invoked on the accessory's networking thread, thus
  * blocking for an extended period of time is not recommended.
@@ -267,7 +271,8 @@ hap_service_t *hap_service_create(void *opaque,
                                   int num_characteristics,
                                   hap_get_callback_t *get,
                                   hap_set_callback_t *set,
-                                  hap_init_callback_t *init) HAP_PUBLIC_API;
+                                  hap_init_callback_t *init,
+                                  hap_fini_callback_t *fini) HAP_PUBLIC_API;
 
 
 /**

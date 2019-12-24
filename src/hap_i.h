@@ -98,6 +98,8 @@ struct hap_service {
 
   void (*hs_init)(void *opaque);
 
+  void (*hs_fini)(void *opaque);
+
   void *hs_opaque;
 
   struct hap_accessory *hs_ha;

@@ -50,7 +50,8 @@ hap_service_create(void *opaque,
                    int num_characteristics,
                    hap_get_callback_t *get,
                    hap_set_callback_t *set,
-                   hap_init_callback_t *init)
+                   hap_init_callback_t *init,
+                   hap_fini_callback_t *fini)
 {
   hap_service_t *hs = calloc(1, sizeof(hap_service_t) +
                              num_characteristics * sizeof(hap_value_type_t));
@@ -60,6 +61,7 @@ hap_service_create(void *opaque,
   hs->hs_characteristic_get = get;
   hs->hs_characteristic_set = set;
   hs->hs_init = init;
+  hs->hs_fini = fini;
   return hs;
 }
 
@@ -176,7 +178,7 @@ svc_accessory_information_create(hap_accessory_t *ha)
   return hap_service_create(ha, HAP_SERVICE_ACCESSORY_INFORMATION, 6,
                             svc_accessory_information_get,
                             svc_accessory_information_set,
-                            NULL);
+                            NULL, NULL);
 }
 
 
@@ -195,7 +197,7 @@ static hap_service_t *
 svc_protocol_information_create(void)
 {
   return hap_service_create(NULL,  HAP_SERVICE_PROTOCOL_INFORMATION, 1,
-                            svc_protocol_information_get, NULL, NULL);
+                            svc_protocol_information_get, NULL, NULL, NULL);
 }
 
 
@@ -963,6 +965,8 @@ hap_accessory_destroy(hap_accessory_t *ha)
 
   hap_service_t *hs;
   while((hs = TAILQ_FIRST(&ha->ha_services)) != NULL) {
+    if(hs->hs_fini)
+      hs->hs_fini(hs->hs_opaque);
     TAILQ_REMOVE(&ha->ha_services, hs, hs_link);
     free(hs->hs_type);
     free(hs);
