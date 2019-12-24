@@ -941,6 +941,7 @@ pairing_remove(hap_connection_t *hc, struct tlv *tlvs)
             HAP_PEER_ADMIN ? ", admin" : "");
     free(hp->hp_id);
     LIST_REMOVE(hp, hp_link);
+    free(hp);
   }
 
   hap_accessory_lts_save(ha);
