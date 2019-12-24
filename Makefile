@@ -60,5 +60,6 @@ uninstall:
 checkextdeps:
 	@which pkg-config >/dev/null || (echo "\nDependency unmet: Need pkg-config\n" && exit 1)
 	@pkg-config --atleast-version=1.1.1 libcrypto || (echo "\nDependency unmet: Need at least openssl >= 1.1.1\n" && exit 1)
+	@pkg-config avahi-client || (echo "\nDependency unmet: Need avahi-client\n" && exit 1)
 
 -include $(DEPS)
