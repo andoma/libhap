@@ -50,6 +50,7 @@ hap_service_create(void *opaque,
                    int num_characteristics,
                    hap_get_callback_t *get,
                    hap_set_callback_t *set,
+                   hap_flush_callback_t *flush,
                    hap_init_callback_t *init,
                    hap_fini_callback_t *fini)
 {
@@ -60,6 +61,7 @@ hap_service_create(void *opaque,
   hs->hs_num_characteristics = num_characteristics;
   hs->hs_characteristic_get = get;
   hs->hs_characteristic_set = set;
+  hs->hs_flush = flush;
   hs->hs_init = init;
   hs->hs_fini = fini;
   return hs;
@@ -178,7 +180,7 @@ svc_accessory_information_create(hap_accessory_t *ha)
   return hap_service_create(ha, HAP_SERVICE_ACCESSORY_INFORMATION, 6,
                             svc_accessory_information_get,
                             svc_accessory_information_set,
-                            NULL, NULL);
+                            NULL, NULL, NULL);
 }
 
 
@@ -197,7 +199,8 @@ static hap_service_t *
 svc_protocol_information_create(void)
 {
   return hap_service_create(NULL,  HAP_SERVICE_PROTOCOL_INFORMATION, 1,
-                            svc_protocol_information_get, NULL, NULL, NULL);
+                            svc_protocol_information_get,
+                            NULL, NULL, NULL, NULL);
 }
 
 
@@ -603,6 +606,9 @@ hap_notify_on_thread(hap_accessory_t *ha, hap_msg_t *hm)
   const int iid = hs->hs_iid + 1 + hm->hm_index;
   if(hm->hm_local_echo) {
     hs->hs_characteristic_set(hs->hs_opaque, hm->hm_index, hm->hm_value);
+
+    if(hs->hs_flush != NULL)
+      hs->hs_flush(hs->hs_opaque);
   }
 
   hap_send_notify(ha, hs->hs_aid, iid, hm->hm_value, NULL);
@@ -701,6 +707,9 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
       return -1;
     }
 
+    SIMPLEQ_HEAD(, hap_service) to_update;
+    SIMPLEQ_INIT(&to_update);
+
     int all_ok = 1;
     scoped_buf_t json = {};
     buf_append_str(&json, "{\"characteristics\":[");
@@ -760,6 +769,10 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
 
             statusCode = hs->hs_characteristic_set(hs->hs_opaque, idx, hv);
             if(statusCode == HAP_STATUS_OK) {
+              if(hs->hs_flush && !hs->hs_on_tmp_link) {
+                SIMPLEQ_INSERT_TAIL(&to_update, hs, hs_tmp_link);
+                hs->hs_on_tmp_link = 1;
+              }
               hap_send_notify(ha, aid, iid, hv, hc);
             }
           }
@@ -785,6 +798,12 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
 
       buf_printf(&json, "%s{\"aid\":%d,\"iid\":%d,\"status\":%d}",
                  sep, aid, iid, statusCode);
+    }
+
+    hap_service_t *hs;
+    SIMPLEQ_FOREACH(hs, &to_update, hs_tmp_link) {
+      hs->hs_flush(hs->hs_opaque);
+      hs->hs_on_tmp_link = 0;
     }
 
     if(all_ok)

@@ -96,6 +96,8 @@ struct hap_service {
 
   int (*hs_characteristic_set)(void *opaque, int index, hap_value_t value);
 
+  void (*hs_flush)(void *opaque);
+
   void (*hs_init)(void *opaque);
 
   void (*hs_fini)(void *opaque);
@@ -105,6 +107,9 @@ struct hap_service {
   struct hap_accessory *hs_ha;
 
   uint8_t hs_config_digest[20];
+
+  SIMPLEQ_ENTRY(hap_service) hs_tmp_link;
+  int hs_on_tmp_link;
 
   hap_value_type_t hs_formats[0];
 };

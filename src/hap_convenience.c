@@ -89,8 +89,8 @@ hap_light_builb_create(void *opaque,
   lb->opaque = opaque;
   lb->set = set;
   lb->hs = hap_service_create(lb, HAP_SERVICE_LIGHT_BULB, 1,
-                              lightbulb_get, lightbulb_set, lightbulb_init,
-                              lightbulb_fini);
+                              lightbulb_get, lightbulb_set, NULL,
+                              lightbulb_init, lightbulb_fini);
   return lb->hs;
 }
 
@@ -214,10 +214,17 @@ rgblight_set(void *opaque, int index, hap_value_t value)
     break;
   }
 
-  hap_accessory_lts_save(rgb->hs->hs_ha);
-  return rgblight_update(rgb, state);
+  return 0;
 }
 
+static void
+rgblight_flush(void *opaque)
+{
+  rgblight_t *rgb = opaque;
+  rgb_state_t *state = hap_service_state_recall(rgb->hs, sizeof(rgb_state_t));
+  hap_accessory_lts_save(rgb->hs->hs_ha);
+  rgblight_update(rgb, state);
+}
 
 static void
 rgblight_init(void *opaque)
@@ -245,7 +252,7 @@ hap_rgb_light_create(void *opaque,
   rgb->opaque = opaque;
   rgb->set = set;
   rgb->hs = hap_service_create(rgb, HAP_SERVICE_LIGHT_BULB, 4,
-                               rgblight_get, rgblight_set, rgblight_init,
-                               rgblight_fini);
+                               rgblight_get, rgblight_set, rgblight_flush,
+                               rgblight_init, rgblight_fini);
   return rgb->hs;
 }
