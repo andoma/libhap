@@ -47,10 +47,15 @@ ${O}/${SONAME}: ${SRCS} Makefile
 solib: ${O}/${SONAME}
 
 install: ${O}/${SONAME}
-	@mkdir -p ${PREFIX}/include/ ${PREFIX}/lib/
-	cp src/hap.h ${PREFIX}/include/
-	cp ${O}/${SONAME} ${PREFIX}/lib/
-	ln -s ${PREFIX}/lib/${SONAME} libhap.so
+	@mkdir -p "${PREFIX}/include/" "${PREFIX}/lib/"
+	cp src/hap.h "${PREFIX}/include/libhap"
+	cp "${O}/${SONAME}" "${PREFIX}/lib/"
+	ln -srf "${PREFIX}/lib/${SONAME}" "${PREFIX}/lib/libhap.so"
+	if [ "x`id -u $$USER`" = "x0" ]; then ldconfig ; fi
+
+uninstall:
+	rm -rf "${PREFIX}/lib/libhap.so" "${PREFIX}/lib/${SONAME}" "${PREFIX}/include/libhap"
+
 
 checkextdeps:
 	@which pkg-config >/dev/null || (echo "\nDependency unmet: Need pkg-config\n" && exit 1)
