@@ -80,7 +80,6 @@ add_service_on_thread(hap_accessory_t *ha, hap_msg_t *hm)
     hs->hs_iid = 1;
   } else {
     hs->hs_iid = last->hs_iid + last->hs_num_characteristics + 2;
-    assert(aid == last->hs_aid || aid == last->hs_aid + 1);
   }
 
   hs->hs_aid = aid;
