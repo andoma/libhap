@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 
@@ -84,6 +85,136 @@ rgb_main(void)
   return ha;
 }
 
+
+
+
+
+typedef struct {
+  char *name;
+  char *manufacturer;
+  char *sn;
+  char *model;
+  char *fw_revision;
+
+} bridged_accessory_t;
+
+
+static hap_characteristic_t
+bridged_accessory_info_get(void *opaque, int index)
+{
+  bridged_accessory_t *ba = opaque;
+  switch(index) {
+  case 0: return hap_make_string_ro(HAP_CHARACTERISTIC_NAME,
+                                    ba->name);
+  case 1: return hap_make_string_ro(HAP_CHARACTERISTIC_MANUFACTURER,
+                                    ba->manufacturer);
+  case 2: return hap_make_string_ro(HAP_CHARACTERISTIC_SERIAL_NUMBER,
+                                    ba->sn);
+  case 3: return hap_make_string_ro(HAP_CHARACTERISTIC_MODEL,
+                                    ba->model);
+  case 4: return hap_make_string_ro(HAP_CHARACTERISTIC_FIRMWARE_REVISION,
+                                    ba->fw_revision);
+  case 5: return (hap_characteristic_t) {.type = HAP_CHARACTERISTIC_IDENTIFY,
+      .perms = HAP_PERM_PW
+  };
+  default:
+    return (hap_characteristic_t){};
+  }
+}
+
+
+static void
+bridged_accessory_info_fini(void *opaque)
+{
+  bridged_accessory_t *ba = opaque;
+  free(ba->name);
+  free(ba->manufacturer);
+  free(ba->sn);
+  free(ba->model);
+  free(ba->fw_revision);
+  free(ba);
+}
+
+
+
+static hap_service_t *
+bridged_accessory_info_create(const char *name,
+                              const char *manufacturer,
+                              const char *sn,
+                              const char *model,
+                              const char *fw_revision)
+{
+  bridged_accessory_t *ba = calloc(1, sizeof(bridged_accessory_t));
+
+  ba->name = strdup(name);
+  ba->manufacturer = strdup(manufacturer);
+  ba->sn = strdup(sn);
+  ba->model = strdup(model);
+  ba->fw_revision = strdup(fw_revision);
+
+  return hap_service_create(ba, HAP_SERVICE_ACCESSORY_INFORMATION, 6,
+                            bridged_accessory_info_get,
+                            NULL, NULL, NULL,
+                            bridged_accessory_info_fini);
+}
+
+
+
+
+
+
+static hap_accessory_t *
+bridge_main(void)
+{
+  hap_accessory_t *ha =
+    hap_accessory_create("Bridge", ACCESSORY_PASSWORD, "bridge.cfg",
+                         HAP_CAT_BRIDGES, ACCESSORY_MANUFACTURER,
+                         ACCESSORY_MODEL, ACCESSORY_VERSION, NULL, NULL);
+
+  // Each accessory (identified by last argument to add service)
+  // Needs to have its own accessory-info service
+  // First the RGB light as #2
+
+  hap_accessory_add_service(ha,
+                            bridged_accessory_info_create("RGB",
+                                                          "Lonelycoder",
+                                                          "1234",
+                                                          "test",
+                                                          "1.0"),
+                            2);
+
+  // ... And its actual service
+
+  hap_accessory_add_service(ha,
+                            hap_rgb_light_create(NULL, rgb_set),
+                            2);
+
+
+  // #3 is a regular light bulb
+
+  hap_accessory_add_service(ha,
+                            bridged_accessory_info_create("Lightbulb",
+                                                          "Lonelycoder",
+                                                          "0000",
+                                                          "test",
+                                                          "1.0"),
+                            3);
+
+  // ... Lightbulbs actual service
+
+  hap_accessory_add_service(ha,
+                            hap_light_builb_create(NULL, lightbulb_set),
+                            3);
+
+  return ha;
+}
+
+
+
+
+
+
+
 static void
 help(void)
 {
@@ -91,6 +222,7 @@ help(void)
   printf(" MODE:\n");
   printf("   light-bulb      On/Off light bulb\n");
   printf("   rgb             RGB/Multicolor light\n");
+  printf("   bridge          Multifunction bridge\n");
 }
 
 
@@ -120,6 +252,8 @@ main(int argc, char **argv)
     ha = lightbulb_main();
   } else if(!strcmp(argv[1], "rgb")) {
     ha = rgb_main();
+  } else if(!strcmp(argv[1], "bridge")) {
+    ha = bridge_main();
   } else {
     help();
     return 1;
