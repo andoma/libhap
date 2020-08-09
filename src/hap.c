@@ -437,16 +437,16 @@ value_buf_print(buf_t *b, hap_value_t value)
 {
   switch(value.type) {
   case HAP_INTEGER:
-    buf_printf(b, "\"value\":%d", value.integer);
+    buf_printf(b, ",\"value\":%d", value.integer);
     break;
   case HAP_FLOAT:
-    buf_printf(b, "\"value\":%f", value.number);
+    buf_printf(b, ",\"value\":%f", value.number);
     break;
   case HAP_BOOLEAN:
-    buf_printf(b, "\"value\":%s", value.boolean ? "true" : "false");
+    buf_printf(b, ",\"value\":%s", value.boolean ? "true" : "false");
     break;
   case HAP_STRING:
-    buf_append_str(b, "\"value\":");
+    buf_append_str(b, ",\"value\":");
     buf_append_and_escape_jsonstr(b, value.string, 1);
     break;
   default:
@@ -473,11 +473,11 @@ characteristic_to_json(hap_characteristic_t c, int aid, int iid,
   if(c.perms & HAP_PERM_EV) {
     buf_printf(output, "%s\"ev\"", sep); sep = ",";
   }
-  buf_append_str(output, "],");
+  buf_append_str(output, "]");
   if(iid)
-    buf_printf(output, "\"iid\":%d,", iid);
+    buf_printf(output, ",\"iid\":%d", iid);
   if(aid)
-    buf_printf(output, "\"aid\":%d,", aid);
+    buf_printf(output, ",\"aid\":%d", aid);
 
   const char *format = "bool";
   switch(c.value.type) {
@@ -496,18 +496,18 @@ characteristic_to_json(hap_characteristic_t c, int aid, int iid,
 
   if(c.minValue != c.maxValue) {
     buf_printf(output,
-               "\"minValue\":%f,\"maxValue\":%f,",
+               ",\"minValue\":%f,\"maxValue\":%f",
                c.minValue, c.maxValue);
   }
 
   if(c.minStep) {
-    buf_printf(output, "\"minStep\":%f,", c.minStep);
+    buf_printf(output, ",\"minStep\":%f", c.minStep);
   }
 
-  buf_printf(output, "%s\"format\":\"%s\",",
+  buf_printf(output, "%s,\"format\":\"%s\"",
              hc != NULL &&
              intvec_find(&hc->hc_watched_iids, iid) != -1 ?
-             "\"ev\":true," : "",
+             ",\"ev\":true" : "",
              format);
 
   value_buf_print(output, c.value);
@@ -534,7 +534,7 @@ hap_accessories(hap_connection_t *hc, enum http_method method,
 
     if(current_aid != hs->hs_aid) {
       if(current_aid) {
-        buf_append_str(&json, "},");
+        buf_append_str(&json, "]},");
       }
       buf_printf(&json, "{\"aid\":%d,\"services\":[", hs->hs_aid);
       current_aid = hs->hs_aid;
@@ -548,10 +548,10 @@ hap_accessories(hap_connection_t *hc, enum http_method method,
 
     for(int i = 0; i < hs->hs_num_characteristics; i++) {
       if(i)
-        buf_append_str(&json, ",\n");
+        buf_append_str(&json, ",");
       const int iid = hs->hs_iid + 1 + i;
       hap_characteristic_t c = hs->hs_characteristic_get(hs->hs_opaque, i);
-      characteristic_to_json(c, 0, iid, hc, &json);
+      characteristic_to_json(c, current_aid, iid, hc, &json);
       free(c.storage);
     }
     buf_append_str(&json, "]}");
