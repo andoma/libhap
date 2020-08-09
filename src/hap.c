@@ -912,6 +912,8 @@ hap_accessory_create(const char *name,
   ha->ha_model = strdup(model);
   ha->ha_version = strdup(version ?: "0.1");
   ha->ha_password = strdup(password);
+  ha->ha_logcb = logcb;
+  ha->ha_opaque = opaque;
 
   hap_accessory_lts_load(ha);
 
