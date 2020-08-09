@@ -579,7 +579,7 @@ hap_send_notify(hap_accessory_t *ha, int aid, int iid,
     if(json.size == 0) {
 
       buf_printf(&json,
-                 "{\"characteristics\":[{\"aid\":%d,\"iid\":%d,",
+                 "{\"characteristics\":[{\"aid\":%d,\"iid\":%d",
                  aid, iid);
       value_buf_print(&json, value);
       buf_append_str(&json, "}]}");
