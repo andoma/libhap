@@ -130,7 +130,7 @@ hap_accessory_add_service(hap_accessory_t *ha, hap_service_t *hs, int aid)
 //====================================================================
 
 
-static hap_characteristic_t
+hap_characteristic_t
 hap_make_string_ro(const char *type, const char *string)
 {
   assert(string != NULL);
