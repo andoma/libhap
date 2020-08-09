@@ -47,8 +47,8 @@ ${O}/${SONAME}: ${SRCS} Makefile
 solib: ${O}/${SONAME}
 
 install: ${O}/${SONAME}
-	@mkdir -p "${PREFIX}/include/" "${PREFIX}/lib/"
-	cp src/hap.h "${PREFIX}/include/libhap"
+	@mkdir -p "${PREFIX}/include/libhap" "${PREFIX}/lib/"
+	cp src/hap.h "${PREFIX}/include/libhap/"
 	cp "${O}/${SONAME}" "${PREFIX}/lib/"
 	ln -srf "${PREFIX}/lib/${SONAME}" "${PREFIX}/lib/libhap.so"
 	if [ "x`id -u $$USER`" = "x0" ]; then ldconfig ; fi
