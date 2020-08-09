@@ -37,9 +37,11 @@ libhap itself includes these excellent libraries:
 
 The API is documented in [src/hap.h](src/hap.h)
 
-The example in [src/main.c](src/main.c) contains an example for how to
-create a simple light-bulb accessory using the `hap_light_builb_create()`
-convenience function.
+The example in [src/main.c](src/main.c) contains a few examples for how to create:
+
+ * A light-bulb accessory using the `hap_light_builb_create()` convenience function.
+ * An RGB light accessory using the `hap_rgb_light_create()` convenience function.
+ * A Bridge combining the accessories above.
 
 To create more complex accessories, please read Apple's [Using the HomeKit Accessory Protocol Specification](https://developer.apple.com/support/homekit-accessory-protocol/) to understand the relationship between accessories, services and characteristics.
 
