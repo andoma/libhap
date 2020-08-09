@@ -98,7 +98,8 @@ typedef struct {
 } hap_characteristic_t;
 
 
-hap_characteristic_t hap_make_string_ro(const char *type, const char *string);
+hap_characteristic_t hap_make_string_ro(const char *type, const char *string)
+  HAP_PUBLIC_API;
 
 typedef enum {
   HAP_CAT_OTHER = 1,
