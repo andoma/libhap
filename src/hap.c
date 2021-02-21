@@ -675,6 +675,27 @@ get_named_int(const char *json, struct json_token_t tokens[], int i,
 }
 
 
+typedef struct {
+  hap_service_t *hs;
+  hap_status_t status;
+  pthread_t tid;
+  hap_value_t hv;
+  int aid;
+  int iid;
+} update_t;
+
+
+
+
+static void *
+update_thread(void *arg)
+{
+  update_t *u = arg;
+  hap_service_t *hs = u->hs;
+  const int idx = u->iid - hs->hs_iid - 1;
+  u->status = hs->hs_characteristic_set(hs->hs_opaque, idx, u->hv);
+  return NULL;
+}
 
 int
 hap_characteristics(hap_connection_t *hc, enum http_method method,
@@ -686,7 +707,7 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
   char errbuf[512];
   if(method == HTTP_PUT) {
     const char *req_json = (const char *)request_body;
-    const int max_tokens = 256;
+    const int max_tokens = 4096;
     struct json_token_t tokens[max_tokens];
     json_size_t num_tokens = json_parse(req_json, request_body_len,
                                         tokens, max_tokens);
@@ -709,12 +730,11 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
     SIMPLEQ_HEAD(, hap_service) to_update;
     SIMPLEQ_INIT(&to_update);
 
-    int all_ok = 1;
-    scoped_buf_t json = {};
-    buf_append_str(&json, "{\"characteristics\":[");
-    const char *sep = "";
+    update_t updates[tokens[i].value_length];
 
-    for(i = tokens[i].child; i != 0; i = tokens[i].sibling) {
+    size_t num_updates = 0;
+
+    for(i = tokens[i].child; i != 0; i = tokens[i].sibling, num_updates++) {
 
       const int aid = get_named_int(req_json, tokens, i, "aid", 0);
       const int iid = get_named_int(req_json, tokens, i, "iid", 0);
@@ -727,38 +747,37 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
           break;
       }
 
-      hap_status_t statusCode = HAP_STATUS_OK;
+      update_t *u = &updates[num_updates];
+      u->aid = aid;
+      u->iid = iid;
+      u->hs = hs;
+      u->tid = 0;
 
       if(hs == NULL) {
         hap_log(ha, hc, LOG_WARNING,
                 "Attempt to write to non-existent aid:%d iid:%d",
                 aid, iid);
-
-        statusCode = HAP_STATUS_RESOURCE_DOES_NOT_EXIST;
-
+        u->status = HAP_STATUS_RESOURCE_DOES_NOT_EXIST;
       } else {
         int ev;
         int val = find_in_object(req_json, tokens, i, "value");
 
         if(val) {
           if(hs->hs_characteristic_set == NULL) {
-            statusCode = HAP_STATUS_RESOURCE_IS_READ_ONLY;
+            u->status = HAP_STATUS_RESOURCE_IS_READ_ONLY;
           } else {
 
-            const int idx = iid - hs->hs_iid - 1;
-            assert(idx < hs->hs_num_characteristics);
-
-            hap_value_t hv = {};
+            const int idx = u->iid - hs->hs_iid - 1;
 
             switch(hs->hs_formats[idx]) {
             case HAP_INTEGER:
-              hv.integer = get_int(req_json, tokens, val, 0);
+              u->hv.integer = get_int(req_json, tokens, val, 0);
               break;
             case HAP_BOOLEAN:
-              hv.boolean = get_int(req_json, tokens, val, 0);
+              u->hv.boolean = get_int(req_json, tokens, val, 0);
               break;
             case HAP_FLOAT:
-              hv.number = get_int(req_json, tokens, val, 0);
+              u->hv.number = get_int(req_json, tokens, val, 0);
               break;
             case HAP_STRING:
               break;
@@ -766,14 +785,7 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
               break;
             }
 
-            statusCode = hs->hs_characteristic_set(hs->hs_opaque, idx, hv);
-            if(statusCode == HAP_STATUS_OK) {
-              if(hs->hs_flush && !hs->hs_on_tmp_link) {
-                SIMPLEQ_INSERT_TAIL(&to_update, hs, hs_tmp_link);
-                hs->hs_on_tmp_link = 1;
-              }
-              hap_send_notify(ha, aid, iid, hv, hc);
-            }
+            pthread_create(&u->tid, NULL, update_thread, u);
           }
 
         } else if((ev = find_in_object(req_json, tokens, i, "ev")) != 0) {
@@ -787,16 +799,39 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
             intvec_delete(&hc->hc_watched_iids, pos);
             hap_log(ha, hc, LOG_DEBUG, "Stopped watching IID %d", iid);
           }
-
+          u->status = HAP_STATUS_OK;
         } else {
-          statusCode = HAP_STATUS_INVALID_WRITE_REQ;
+          u->status = HAP_STATUS_INVALID_WRITE_REQ;
+        }
+      }
+    }
+
+    scoped_buf_t json = {};
+    buf_append_str(&json, "{\"characteristics\":[");
+    int all_ok = 1;
+    const char *sep = "";
+
+    for(size_t i = 0; i < num_updates; i++) {
+      update_t *u = &updates[i];
+      hap_service_t *hs = u->hs;
+      if(u->tid) {
+        pthread_join(u->tid, NULL);
+
+        if(u->status == HAP_STATUS_OK) {
+          if(hs->hs_flush && !hs->hs_on_tmp_link) {
+            SIMPLEQ_INSERT_TAIL(&to_update, hs, hs_tmp_link);
+            hs->hs_on_tmp_link = 1;
+          }
+          hap_send_notify(ha, hs->hs_aid, hs->hs_iid, u->hv, hc);
         }
       }
 
-      all_ok &= !statusCode;
+      if(u->status != HAP_STATUS_OK) {
+        all_ok = 0;
+      }
 
       buf_printf(&json, "%s{\"aid\":%d,\"iid\":%d,\"status\":%d}",
-                 sep, aid, iid, statusCode);
+                 sep, u->aid, u->iid, u->status);
       sep = ",";
     }
 
@@ -805,7 +840,6 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
       hs->hs_flush(hs->hs_opaque);
       hs->hs_on_tmp_link = 0;
     }
-
     if(all_ok)
       return hap_http_send_reply(hc, 204, NULL, 0, NULL);
 
