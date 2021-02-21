@@ -797,6 +797,7 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
 
       buf_printf(&json, "%s{\"aid\":%d,\"iid\":%d,\"status\":%d}",
                  sep, aid, iid, statusCode);
+      sep = ",";
     }
 
     hap_service_t *hs;
