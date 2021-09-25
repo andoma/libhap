@@ -194,7 +194,15 @@ client_callback(AvahiClient *c, AvahiClientState state, void *userdata)
 
 
 
-
+static int
+hap_prepare(hap_connection_t *hc, enum http_method method,
+            uint8_t *request_body, size_t request_body_len,
+            const hap_query_args_t *qa)
+{
+  const char *resp = "{\"status\":0}";
+  return hap_http_send_reply(hc, 200, resp, strlen(resp),
+                             "application/hap+json");
+}
 
 const static struct {
   const char *path;
@@ -208,6 +216,7 @@ const static struct {
   {"/pairings",        hap_pairings, 1 },
   {"/accessories",     hap_accessories, 1 },
   {"/characteristics", hap_characteristics, 1 },
+  {"/prepare",         hap_prepare, 1 },
 };
 
 int
