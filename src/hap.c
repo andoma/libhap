@@ -33,6 +33,7 @@
 #include <syslog.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include <openssl/rand.h>
 
@@ -440,7 +441,10 @@ value_buf_print(buf_t *b, hap_value_t value)
     buf_printf(b, ",\"value\":%d", value.integer);
     break;
   case HAP_FLOAT:
-    buf_printf(b, ",\"value\":%f", value.number);
+    if(isfinite(value.number))
+      buf_printf(b, ",\"value\":%f", value.number);
+    else
+      buf_append_str(b, ",\"value\":null");
     break;
   case HAP_BOOLEAN:
     buf_printf(b, ",\"value\":%s", value.boolean ? "true" : "false");
