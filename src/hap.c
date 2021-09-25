@@ -436,6 +436,7 @@ value_buf_print(buf_t *b, hap_value_t value)
 {
   switch(value.type) {
   case HAP_INTEGER:
+  case HAP_UINT8:
     buf_printf(b, ",\"value\":%d", value.integer);
     break;
   case HAP_FLOAT:
@@ -488,6 +489,9 @@ characteristic_to_json(hap_characteristic_t c, int aid, int iid,
     break;
   case HAP_FLOAT:
     format = "float";
+    break;
+  case HAP_UINT8:
+    format = "uint8";
     break;
   default:
     break;
@@ -771,6 +775,7 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
 
             switch(hs->hs_formats[idx]) {
             case HAP_INTEGER:
+            case HAP_UINT8:
               u->hv.integer = get_int(req_json, tokens, val, 0);
               break;
             case HAP_BOOLEAN:

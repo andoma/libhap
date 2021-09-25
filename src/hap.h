@@ -57,6 +57,7 @@ typedef enum {
   HAP_STRING = 2,
   HAP_BOOLEAN = 3,
   HAP_FLOAT = 4,
+  HAP_UINT8 = 5,
 } hap_value_type_t;
 
 
