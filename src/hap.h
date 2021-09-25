@@ -196,7 +196,9 @@ typedef enum {
 #define HAP_CHARACTERISTIC_SATURATION              "2F"
 #define HAP_CHARACTERISTIC_SERIAL_NUMBER           "30"
 #define HAP_CHARACTERISTIC_VERSION                 "37"
-
+#define HAP_CHARACTERISTIC_CURRENT_HEATER_COOLER_STATE "B1"
+#define HAP_CHARACTERISTIC_TARGET_HEATER_COOLER_STATE  "B2"
+#define HAP_CHARACTERISTIC_HEATING_THRESHOLD           "12"
 
 typedef struct hap_accessory hap_accessory_t;
 
