@@ -23,6 +23,7 @@
  */
 
 #define _GNU_SOURCE
+#include <libgen.h>
 #include <string.h>
 
 #include <sys/stat.h>
@@ -330,12 +331,52 @@ lts_append_tlv(buf_t *buf, uint8_t type, uint8_t length, const void *value)
 
 
 
+static int
+safe_write_file(hap_accessory_t *ha, const char *filename,
+                const void *data, size_t len)
+{
+  char path[PATH_MAX];
+  snprintf(path, sizeof(path), "%s.tmp", filename);
+
+  int fd = open(path, O_TRUNC | O_RDWR | O_CREAT, 0644);
+  if(fd == -1) {
+    hap_log(ha, NULL, LOG_WARNING, "Unable create tempfile %s -- %s",
+            path, strerror(errno));
+    return -1;
+  }
+
+  if(write(fd, data, len) != len) {
+    hap_log(ha, NULL, LOG_WARNING, "Unable to write state to %s",
+            path);
+    close(fd);
+    return -1;
+  }
+  close(fd);
+
+  if(rename(path, filename) == -1) {
+    hap_log(ha, NULL, LOG_WARNING, "Unable rename %s -> %s -- %s",
+            path, filename, strerror(errno));
+    return -1;
+  } else {
+    hap_log(ha, NULL, LOG_DEBUG, "Saved state to %s",
+            ha->ha_storage_path);
+  }
+  return 0;
+}
 
 
 void
-hap_accessory_lts_save(hap_accessory_t *ha)
+hap_accessory_lts_save(hap_accessory_t *ha, bool only_if_service_states)
 {
-  scoped_buf_t buf = {};
+  pthread_mutex_lock(&ha->ha_state_mutex);
+
+  if(only_if_service_states &&
+     LIST_FIRST(&ha->ha_service_states) == NULL) {
+    pthread_mutex_unlock(&ha->ha_state_mutex);
+    return;
+  }
+
+  buf_t buf = {};
 
   uint8_t key[32];
   size_t key_size = sizeof(key);
@@ -376,30 +417,38 @@ hap_accessory_lts_save(hap_accessory_t *ha)
     buf_append(&buf, hss->hss_data, hss->hss_size);
   }
 
-  int fd = open(ha->ha_storage_path, O_WRONLY | O_TRUNC | O_CREAT, 0600);
-  if(fd == -1) {
-    hap_log(ha, NULL, LOG_WARNING, "Unable save state to %s -- %s",
-            ha->ha_storage_path, strerror(errno));
+  if(buf.size == ha->ha_written_state.size &&
+     !memcmp(buf.data, ha->ha_written_state.data, buf.size)) {
+    // State already persisted to disk
+    buf_free(&buf);
+    pthread_mutex_unlock(&ha->ha_state_mutex);
     return;
   }
 
-  if(write(fd, buf.data, buf.size) != buf.size) {
-    hap_log(ha, NULL, LOG_WARNING, "Unable write state to %s",
-            ha->ha_storage_path);
+  if(!safe_write_file(ha, ha->ha_storage_path, buf.data, buf.size)) {
+    // Written OK
+    buf_free(&ha->ha_written_state);
+    ha->ha_written_state = buf;
+  } else {
+    buf_free(&buf);
   }
-  hap_log(ha, NULL, LOG_DEBUG, "Saved state to %s",
-          ha->ha_storage_path);
-  close(fd);
+  pthread_mutex_unlock(&ha->ha_state_mutex);
 }
 
 
 void *
 hap_service_state_recall(hap_service_t *hs, size_t state_size)
 {
-  if(hs->hs_state != NULL)
-    return hs->hs_state->hss_data;
-
+  void *data;
   hap_accessory_t *ha = hs->hs_ha;
+
+  pthread_mutex_lock(&ha->ha_state_mutex);
+  if(hs->hs_state != NULL) {
+    data = hs->hs_state->hss_data;
+    pthread_mutex_unlock(&ha->ha_state_mutex);
+    return data;
+  }
+
   hap_service_state_t *hss;
   LIST_FOREACH(hss, &ha->ha_service_states, hss_link) {
     if(hss->hss_service != NULL)
@@ -412,7 +461,9 @@ hap_service_state_recall(hap_service_t *hs, size_t state_size)
                sizeof(hs->hs_config_digest))) {
       hss->hss_service = hs;
       hs->hs_state = hss;
-      return hss->hss_data;
+      data = hs->hs_state->hss_data;
+      pthread_mutex_unlock(&ha->ha_state_mutex);
+      return data;
     }
   }
 
@@ -423,7 +474,9 @@ hap_service_state_recall(hap_service_t *hs, size_t state_size)
   LIST_INSERT_HEAD(&ha->ha_service_states, hss, hss_link);
   hss->hss_service = hs;
   hs->hs_state = hss;
-  return hss->hss_data;
+  data = hs->hs_state->hss_data;
+  pthread_mutex_unlock(&ha->ha_state_mutex);
+  return data;
 }
 
 
@@ -617,6 +670,7 @@ hap_notify_on_thread(hap_accessory_t *ha, hap_msg_t *hm)
     if(hs->hs_flush != NULL)
       hs->hs_flush(hs->hs_opaque);
   }
+  hap_accessory_lts_save(ha, true);
 
   hap_send_notify(ha, hs->hs_aid, iid, hm->hm_value, NULL);
   return 0;
@@ -849,6 +903,8 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
       hs->hs_flush(hs->hs_opaque);
       hs->hs_on_tmp_link = 0;
     }
+
+    hap_accessory_lts_save(ha, true);
     if(all_ok)
       return hap_http_send_reply(hc, 204, NULL, 0, NULL);
 
@@ -949,6 +1005,7 @@ hap_accessory_create(const char *name,
 
   hap_accessory_t *ha = calloc(1, sizeof(hap_accessory_t));
   TAILQ_INIT(&ha->ha_services);
+  pthread_mutex_init(&ha->ha_state_mutex, NULL);
   ha->ha_name = strdup(name);
   ha->ha_storage_path = strdup(storage_path);
   ha->ha_category = category;
@@ -989,7 +1046,7 @@ hap_accessory_create(const char *name,
   hap_accessory_add_service(ha, svc_protocol_information_create(), 1);
 
   if(need_save)
-    hap_accessory_lts_save(ha);
+    hap_accessory_lts_save(ha, false);
 
   hap_log(ha, NULL, LOG_DEBUG, "Initialized as ID %s", ha->ha_id);
 
@@ -1044,6 +1101,7 @@ hap_accessory_destroy(hap_accessory_t *ha)
   free(ha->ha_password);
   free(ha->ha_storage_path);
   free(ha->ha_id);
+  buf_free(&ha->ha_written_state);
 
   free(ha);
 }

@@ -591,7 +591,7 @@ pair_setup_m5(hap_connection_t *hc, struct tlv *tlvs)
          sizeof(hp->hp_public_key));
   LIST_INSERT_HEAD(&ha->ha_peers, hp, hp_link);
   hp->hp_flags = HAP_PEER_ADMIN;
-  hap_accessory_lts_save(ha);
+  hap_accessory_lts_save(ha, false);
 
   hap_log(hc->hc_ha, hc, LOG_INFO, "Added first peer %s, admin", hp->hp_id);
 
@@ -906,7 +906,7 @@ pairing_add(hap_connection_t *hc, struct tlv *tlvs)
           "%s peer %s%s", verb, hp->hp_id, hp->hp_flags &
           HAP_PEER_ADMIN ? ", admin" : "");
 
-  hap_accessory_lts_save(ha);
+  hap_accessory_lts_save(ha, false);
 
   scoped_buf_t reply = {};
   output_tlv(&reply, kTLVType_State, 1, (const uint8_t []){2});
@@ -944,7 +944,7 @@ pairing_remove(hap_connection_t *hc, struct tlv *tlvs)
     free(hp);
   }
 
-  hap_accessory_lts_save(ha);
+  hap_accessory_lts_save(ha, false);
 
   scoped_buf_t reply = {};
   output_tlv(&reply, kTLVType_State, 1, (const uint8_t []){2});

@@ -130,6 +130,7 @@ struct hap_accessory {
   struct hap_peer_list ha_peers;
 
   struct hap_service_state_list ha_service_states;
+  pthread_mutex_t ha_state_mutex;
 
   struct hap_service_queue ha_services;
 
@@ -168,7 +169,7 @@ struct hap_accessory {
   uint8_t ha_config_hash[20];
   uint16_t ha_config_number;
 
-
+  buf_t ha_written_state;
 };
 
 
@@ -215,9 +216,7 @@ char *hap_http_get_qa(const hap_query_args_t *qa, const char *key);
 
 // ==== hap.c ==============================================
 
-void hap_accessory_lts_save(hap_accessory_t *ha);
-
-void *hap_service_state_recall(hap_service_t *hs, size_t state_size);
+void hap_accessory_lts_save(hap_accessory_t *ha, bool only_if_service_states);
 
 int hap_characteristics(hap_connection_t *hc, enum http_method method,
                         uint8_t *request_body, size_t request_body_len,

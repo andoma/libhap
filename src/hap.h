@@ -329,6 +329,24 @@ void hap_accessory_add_service(hap_accessory_t *ha, hap_service_t *hs,
 void hap_service_notify(hap_service_t *hs, int index,
                         hap_value_t value, bool local_echo) HAP_PUBLIC_API;
 
+/**
+ * Read back state from disk
+ *
+ * If no state has been stored, data will be initialized to zero
+ *
+ * Can be called from any thread.
+ *
+ * @hs The service for which to recall state
+ * @index Size of state, limited to 200 bytes
+ *
+ * Returns pointer to data. State will automatically be freed when
+ * service is destroyed
+ *
+ * libhap will automatically write data back to disk after every
+ * notification and update event if state has changed.
+ *
+ */
+void *hap_service_state_recall(hap_service_t *hs, size_t state_size) HAP_PUBLIC_API;
 
 /**
  * Remove an accessory and free up all resources

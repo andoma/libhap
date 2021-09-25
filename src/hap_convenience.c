@@ -60,7 +60,6 @@ lightbulb_set(void *opaque, int index, hap_value_t value)
   bool *state = hap_service_state_recall(lb->hs, sizeof(bool));
 
   *state = value.boolean;
-  hap_accessory_lts_save(lb->hs->hs_ha);
   return lb->set(lb->opaque, value.boolean);
 }
 
@@ -222,7 +221,6 @@ rgblight_flush(void *opaque)
 {
   rgblight_t *rgb = opaque;
   rgb_state_t *state = hap_service_state_recall(rgb->hs, sizeof(rgb_state_t));
-  hap_accessory_lts_save(rgb->hs->hs_ha);
   rgblight_update(rgb, state);
 }
 

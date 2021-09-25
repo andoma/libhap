@@ -610,7 +610,7 @@ dispatch_message(hap_accessory_t *ha)
   if(r && ha->ha_run == 2) {
     if(hap_check_config_hash(ha)) {
       hap_mdns_update(ha);
-      hap_accessory_lts_save(ha);
+      hap_accessory_lts_save(ha, false);
     }
   }
 
@@ -670,7 +670,7 @@ hap_thread(void *aux)
   while(dispatch_message(ha)) {}
 
   if(hap_check_config_hash(ha))
-    hap_accessory_lts_save(ha);
+    hap_accessory_lts_save(ha, false);
 
   AvahiClient *mdns_client =
     avahi_client_new(ha->ha_ap, AVAHI_CLIENT_NO_FAIL, client_callback, ha,
@@ -702,7 +702,7 @@ hap_thread(void *aux)
 
   hap_remove_stale_service_state(ha);
 
-  hap_accessory_lts_save(ha);
+  hap_accessory_lts_save(ha, false);
 
   avahi_simple_poll_free(ha->ha_asp);
   return NULL;
