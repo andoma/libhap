@@ -125,7 +125,7 @@ srp_calc_b(const BIGNUM *b, const BIGNUM *N, const BIGNUM *g, const BIGNUM *v)
 
 
 static pair_setup_ctx_t *
-pair_setup_ctx_init(const uint8_t salt[static 16], const uint8_t b[static 32],
+pair_setup_ctx_init(const uint8_t *salt, const uint8_t *b,
                     const char *username, const char *password)
 {
   uint8_t rb[32];
@@ -257,9 +257,9 @@ derive_key(const uint8_t *K, size_t K_len, uint8_t *output, size_t output_len,
 
   EVP_PKEY_derive_init(pctx);
   EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha512());
-  EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, strlen(salt));
+  EVP_PKEY_CTX_set1_hkdf_salt(pctx, (const uint8_t *)salt, strlen(salt));
   EVP_PKEY_CTX_set1_hkdf_key(pctx, K, K_len);
-  EVP_PKEY_CTX_add1_hkdf_info(pctx, info, strlen(info));
+  EVP_PKEY_CTX_add1_hkdf_info(pctx, (const uint8_t *)info, strlen(info));
 
   EVP_PKEY_derive(pctx, output, &output_len);
   EVP_PKEY_CTX_free(pctx);
@@ -339,7 +339,8 @@ parse_tlv(uint8_t *data, int len, struct tlv *tlvs, size_t max_tlv)
 
 
 static int
-decrypt_data(uint8_t *data, int len, const uint8_t *key, const char *nonce)
+decrypt_data(uint8_t *data, int len, const uint8_t *key,
+             const uint8_t nonce[static 12])
 {
   if(len < 17)
     return -1;
@@ -347,10 +348,9 @@ decrypt_data(uint8_t *data, int len, const uint8_t *key, const char *nonce)
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_DecryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL);
 
-  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, strlen(nonce), NULL);
+  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, NULL);
   EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16,
                       data + len - 16);
-
   EVP_DecryptInit_ex(ctx, NULL, NULL, key, (const void *)nonce);
 
   uint8_t plaintext[len - 16];
@@ -371,7 +371,7 @@ decrypt_data(uint8_t *data, int len, const uint8_t *key, const char *nonce)
 
 
 static int
-decrypt_tlv(struct tlv *tlv, const uint8_t *key, const char *nonce)
+decrypt_tlv(struct tlv *tlv, const uint8_t *key, const uint8_t nonce[static 12])
 {
   if(decrypt_data(tlv->value, tlv->len, key, nonce))
     return -1;
@@ -384,7 +384,7 @@ decrypt_tlv(struct tlv *tlv, const uint8_t *key, const char *nonce)
 static size_t
 encrypt_buf(uint8_t *output, size_t output_len,
             const buf_t *src, const uint8_t *key,
-            const char *nonce)
+            const uint8_t nonce[static 12])
 {
   const size_t total_len = src->size + 16;
   if(total_len > output_len)
@@ -392,9 +392,9 @@ encrypt_buf(uint8_t *output, size_t output_len,
 
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL);
-  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, strlen(nonce), NULL);
+  EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, NULL);
 
-  EVP_EncryptInit_ex(ctx, NULL, NULL, key, (const void *)nonce);
+  EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce);
 
   int outlen;
   if(!EVP_EncryptUpdate(ctx, output, &outlen, src->data, src->size)) {
@@ -525,6 +525,7 @@ pair_setup_m5(hap_connection_t *hc, struct tlv *tlvs)
   hap_accessory_t *ha = hc->hc_ha;
   pair_setup_ctx_t *psc = hc->hc_psc;
   uint8_t tmp[4096];
+  static const uint8_t nonce1[12] = {0,0,0,0,'P','S','-','M','s','g','0','5'};
 
   if(tlvs[kTLVType_EncryptedData].value == NULL)
     return -1;
@@ -534,7 +535,7 @@ pair_setup_m5(hap_connection_t *hc, struct tlv *tlvs)
              "Pair-Setup-Encrypt-Salt",
              "Pair-Setup-Encrypt-Info");
 
-  if(decrypt_tlv(&tlvs[kTLVType_EncryptedData], key, "PS-Msg05")) {
+  if(decrypt_tlv(&tlvs[kTLVType_EncryptedData], key, nonce1)) {
     return pair_setup_error(hc, 6, kTLVError_Authentication);
   }
 
@@ -632,8 +633,9 @@ pair_setup_m5(hap_connection_t *hc, struct tlv *tlvs)
              "Pair-Setup-Encrypt-Salt",
              "Pair-Setup-Encrypt-Info");
 
-  size_t EncryptedData_len =
-    encrypt_buf(tmp, sizeof(tmp), &subtlv, key, "PS-Msg06");
+  static const uint8_t nonce2[12] = {0,0,0,0,'P','S','-','M','s','g','0','6'};
+
+  size_t EncryptedData_len = encrypt_buf(tmp, sizeof(tmp), &subtlv, key, nonce2);
 
   scoped_buf_t reply = {};
   output_tlv(&reply, kTLVType_State, 1, (const uint8_t []){6});
@@ -756,8 +758,10 @@ pair_verify_m2(hap_connection_t *hc, struct tlv *tlvs)
              "Control-Salt",
              "Control-Write-Encryption-Key");
 
+  static const uint8_t nonce[12] = {0,0,0,0,'P','V','-','M','s','g','0','2'};
+
   size_t EncryptedData_len =
-    encrypt_buf(tmp, sizeof(tmp), &subtlv, hc->hc_SessionKey, "PV-Msg02");
+    encrypt_buf(tmp, sizeof(tmp), &subtlv, hc->hc_SessionKey, nonce);
 
   scoped_buf_t reply = {};
   output_tlv(&reply, kTLVType_State, 1, (const uint8_t []){2});
@@ -771,12 +775,13 @@ pair_verify_m2(hap_connection_t *hc, struct tlv *tlvs)
 static int
 pair_verify_m4(hap_connection_t *hc, struct tlv *tlvs)
 {
+  static const uint8_t nonce[12] = {0,0,0,0,'P','V','-','M','s','g','0','3'};
+
   if(tlvs[kTLVType_EncryptedData].value == NULL)
     return -1;
 
   hap_accessory_t *ha = hc->hc_ha;
-  if(decrypt_tlv(&tlvs[kTLVType_EncryptedData], hc->hc_SessionKey,
-                 "PV-Msg03")) {
+  if(decrypt_tlv(&tlvs[kTLVType_EncryptedData], hc->hc_SessionKey, nonce)) {
     return pair_setup_error(hc, 4, kTLVError_Authentication);
   }
 

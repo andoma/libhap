@@ -15,6 +15,7 @@ SONAME=libhap.so.0
 PREFIX ?= /usr/local
 
 CFLAGS  += -std=gnu99 -O2 -Wall -Werror -Wno-unused-function -g
+CFLAGS += -Wno-deprecated-declarations
 CFLAGS  += $(shell pkg-config --cflags libcrypto avahi-client)
 LDFLAGS += $(shell pkg-config --libs libcrypto avahi-client)
 LDFLAGS += -lpthread
