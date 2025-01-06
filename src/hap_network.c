@@ -595,8 +595,8 @@ hap_check_config_hash(hap_accessory_t *ha)
 static int
 dispatch_message(hap_accessory_t *ha)
 {
-  hap_msg_t *hm = TAILQ_FIRST(&ha->ha_msg_queue);
   pthread_mutex_lock(&ha->ha_msg_mutex);
+  hap_msg_t *hm = TAILQ_FIRST(&ha->ha_msg_queue);
   if(hm != NULL)
     TAILQ_REMOVE(&ha->ha_msg_queue, hm, hm_link);
   pthread_mutex_unlock(&ha->ha_msg_mutex);
@@ -684,7 +684,7 @@ hap_thread(void *aux)
     ha->ha_run = 2;
 
   while(ha->ha_run && (avahi_simple_poll_iterate(ha->ha_asp, -1)) != -1) {
-    dispatch_message(ha);
+    while(dispatch_message(ha)) {}
   }
 
   while(dispatch_message(ha)) {}
