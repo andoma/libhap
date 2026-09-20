@@ -515,7 +515,7 @@ value_buf_print(buf_t *b, hap_value_t value)
 
 static void __attribute__((unused))
 characteristic_to_json(hap_characteristic_t c, int aid, int iid,
-                       const hap_connection_t *hc,
+                       const hap_connection_t *hc, int include_status,
                        buf_t *output)
 {
   buf_printf(output, "{\"type\":\"%s\",\"perms\":[", c.type);
@@ -570,6 +570,9 @@ characteristic_to_json(hap_characteristic_t c, int aid, int iid,
              ",\"ev\":true" : "",
              format);
 
+  if(include_status)
+    buf_printf(output, ",\"status\":%d", c.status);
+
   value_buf_print(output, c.value);
 
   buf_append_str(output, "}");
@@ -611,7 +614,7 @@ hap_accessories(hap_connection_t *hc, enum http_method method,
         buf_append_str(&json, ",");
       const int iid = hs->hs_iid + 1 + i;
       hap_characteristic_t c = hs->hs_characteristic_get(hs->hs_opaque, i);
-      characteristic_to_json(c, current_aid, iid, hc, &json);
+      characteristic_to_json(c, current_aid, iid, hc, 0, &json);
       free(c.storage);
     }
     buf_append_str(&json, "]}");
@@ -931,11 +934,22 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
     assert(include_type  == 0);
 #endif
 
+    // Read all characteristics before the reply is built. If any read
+    // fails the reply is 207 Multi-Status and every entry needs a status.
+    int max_entries = 1;
+    for(const char *p = ids; *p; p++)
+      if(*p == ',')
+        max_entries++;
+
+    struct {
+      int aid;
+      int iid;
+      hap_characteristic_t c;
+    } entries[max_entries];
+    int num_entries = 0;
+    int any_error = 0;
+
     char *sp, *id;
-
-    buf_append_str(&json, "{\"characteristics\":[");
-
-    const char *sep = "";
     while((id = strtok_r(ids, ",", &sp)) != NULL) {
       ids = NULL;
       char *y = strchr(id, '.');
@@ -953,16 +967,44 @@ hap_characteristics(hap_connection_t *hc, enum http_method method,
           break;
       }
 
+      entries[num_entries].aid = aid;
+      entries[num_entries].iid = iid;
+      if(hs == NULL) {
+        hap_log(ha, hc, LOG_WARNING,
+                "Attempt to read non-existent aid:%d iid:%d", aid, iid);
+        entries[num_entries].c = (hap_characteristic_t) {
+          .status = HAP_STATUS_RESOURCE_DOES_NOT_EXIST
+        };
+      } else {
+        entries[num_entries].c =
+          hs->hs_characteristic_get(hs->hs_opaque, iid - hs->hs_iid - 1);
+        if(entries[num_entries].c.status != HAP_STATUS_OK)
+          hap_log(ha, hc, LOG_DEBUG, "Read of aid:%d iid:%d failed: %d",
+                  aid, iid, entries[num_entries].c.status);
+      }
+      if(entries[num_entries].c.status != HAP_STATUS_OK)
+        any_error = 1;
+      num_entries++;
+    }
+
+    buf_append_str(&json, "{\"characteristics\":[");
+    const char *sep = "";
+    for(int i = 0; i < num_entries; i++) {
+      const hap_characteristic_t *c = &entries[i].c;
       buf_append_str(&json, sep);
       sep = ",";
-
-      hap_characteristic_t c =
-        hs->hs_characteristic_get(hs->hs_opaque, iid - hs->hs_iid - 1);
-      characteristic_to_json(c, aid, iid, include_ev ? hc : NULL, &json);
-      free(c.storage);
+      if(c->status != HAP_STATUS_OK) {
+        buf_printf(&json, "{\"aid\":%d,\"iid\":%d,\"status\":%d}",
+                   entries[i].aid, entries[i].iid, c->status);
+      } else {
+        characteristic_to_json(*c, entries[i].aid, entries[i].iid,
+                               include_ev ? hc : NULL, any_error, &json);
+      }
+      free(c->storage);
     }
     buf_append_str(&json, "]}");
-    return hap_http_send_reply(hc, 200, json.data, json.size,
+    return hap_http_send_reply(hc, any_error ? 207 : 200,
+                               json.data, json.size,
                                "application/hap+json");
 
   }

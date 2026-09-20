@@ -96,6 +96,13 @@ typedef struct {
   double maxValue;
   double minStep;
   void *storage;
+
+  // A @get callback sets this to a HAP_STATUS_ error code when the
+  // value can not be read right now, for example when a sensor is not
+  // responding. Reads then answer with that status instead of a value.
+  // The value is still used for the accessory database and events.
+  // Controllers show such an accessory as "No Response".
+  hap_status_t status;
 } hap_characteristic_t;
 
 
@@ -275,6 +282,7 @@ void hap_accessory_start(hap_accessory_t *ha) HAP_PUBLIC_API;
  *                      one characteristic (on, which can be in on or off state)
  *                      See specification for more details.
  * @get Invoked when libhap needs to read a characteristic.
+ *      Set .status in the returned struct to report a read error.
  * @set Invoked when libhap needs to write a characteristic. Can be NULL.
  * @flush Invoked after one or more @set callbacks (originating from
  *        the same request) have finished. This is useful if you want
